@@ -370,6 +370,8 @@ weekday_sd()
 
 
 # Matplots: ---------------------------------------------------------------
+# BY MONTHS:
+# In 2022:
 PrezzoZonale.2022.OraMese <- matrix(rep(0, 24*12), 24, 12)
 for (i in 1:12){
   for (j in 1:24){
@@ -380,9 +382,9 @@ for (i in 1:12){
 matplot(t(PrezzoZonale.2022.OraMese), type = 'l', ylab = 'Clearing price',
 xlab = 'Months', main = 'Clearing price by hour in 2022')
 
-PrezzoZonale.2022.GiornoMese <- matrix(rep(0, 28*12), 28, 12)
+PrezzoZonale.2022.GiornoMese <- matrix(rep(0, 31*12), 31, 12)
 for (i in 1:12){
-  for (j in 1:28){
+  for (j in 1:31){
     PrezzoZonale.2022.GiornoMese[j, i] <-
       mean(demand.2022$PrezzoZonale[which(demand.2022$Giorno==j&demand.2022$Mese==i)])
   }
@@ -390,10 +392,122 @@ for (i in 1:12){
 matplot(t(PrezzoZonale.2022.GiornoMese), type = 'l', ylab = 'Clearing price',
         xlab = 'Months', main = 'Clearing price by day in 2022')
 
+PrezzoZonale.2022.GiornoSettimanaMese <- matrix(rep(0, 7*12), 7, 12)
+for (i in 1:12){
+  for (j in 1:7){
+    PrezzoZonale.2022.GiornoSettimanaMese[j, i] <-
+      mean(demand.2022$PrezzoZonale[which(demand.2022$GiornoSettimana
+                        ==levels(demand$GiornoSettimana)[j]
+        &demand.2022$Mese==i)])
+  }
+}
+matplot(t(PrezzoZonale.2022.GiornoSettimanaMese), type = 'l', ylab = 'Clearing price',
+        xlab = 'Months', main = 'Clearing price by weekday in 2022')
+
+# In 2023:
+PrezzoZonale.2023.OraMese <- matrix(rep(0, 24*12), 24, 12)
+for (i in 1:12){
+  for (j in 1:24){
+    PrezzoZonale.2023.OraMese[j, i] <-
+      mean(demand.2023$PrezzoZonale[which(demand.2023$Ora==j&demand.2023$Mese==i)])
+  }
+}
+matplot(t(PrezzoZonale.2023.OraMese), type = 'l', ylab = 'Clearing price',
+        xlab = 'Months', main = 'Clearing price by hour in 2023')
+
+PrezzoZonale.2023.GiornoMese <- matrix(rep(0, 31*12), 31, 12)
+for (i in 1:12){
+  for (j in 1:31){
+    PrezzoZonale.2023.GiornoMese[j, i] <-
+      mean(demand.2023$PrezzoZonale[which(demand.2023$Giorno==j&demand.2023$Mese==i)])
+  }
+}
+matplot(t(PrezzoZonale.2023.GiornoMese), type = 'l', ylab = 'Clearing price',
+        xlab = 'Months', main = 'Clearing price by day in 2023')
+
+PrezzoZonale.2023.GiornoSettimanaMese <- matrix(rep(0, 7*12), 7, 12)
+for (i in 1:12){
+  for (j in 1:7){
+    PrezzoZonale.2023.GiornoSettimanaMese[j, i] <-
+      mean(demand.2023$PrezzoZonale[which(demand.2023$GiornoSettimana
+                                          ==levels(demand$GiornoSettimana)[j]
+                                          &demand.2023$Mese==i)])
+  }
+}
+matplot(t(PrezzoZonale.2023.GiornoSettimanaMese), type = 'l', ylab = 'Clearing price',
+        xlab = 'Months', main = 'Clearing price by weekday in 2023')
+
+# BY HOURS:
+# In 2022:
+PrezzoZonale.2022.MeseOra <- matrix(rep(0, 24*12), 12, 24)
+for (i in 1:24){
+  for (j in 1:12){
+    PrezzoZonale.2022.MeseOra[j, i] <-
+      mean(demand.2022$PrezzoZonale[which(demand.2022$Mese==j&demand.2022$Ora==i)])
+  }
+}
+matplot(t(PrezzoZonale.2022.MeseOra), type = 'l', ylab = 'Clearing price',
+        xlab = 'Hours', main = 'Clearing price by month in 2022')
+
+PrezzoZonale.2022.GiornoOra <- matrix(rep(0, 31*24), 31, 24)
+for (i in 1:24){
+  for (j in 1:31){
+    PrezzoZonale.2022.GiornoOra[j, i] <-
+      mean(demand.2022$PrezzoZonale[which(demand.2022$Giorno==j&demand.2022$Ora==i)])
+  }
+}
+matplot(t(PrezzoZonale.2022.GiornoOra), type = 'l', ylab = 'Clearing price',
+        xlab = 'Hours', main = 'Clearing price by day in 2022')
+
+PrezzoZonale.2022.GiornoSettimanaOra <- matrix(rep(0, 7*12), 7, 24)
+for (i in 1:24){
+  for (j in 1:7){
+    PrezzoZonale.2022.GiornoSettimanaOra[j, i] <-
+      mean(demand.2022$PrezzoZonale[which(demand.2022$GiornoSettimana
+                                          ==levels(demand$GiornoSettimana)[j]
+                                          &demand.2022$Ora==i)])
+  }
+}
+matplot(t(PrezzoZonale.2022.GiornoSettimanaOra), type = 'l', ylab = 'Clearing price',
+        xlab = 'Hours', main = 'Clearing price by weekday in 2022')
+
+# In 2023:
+PrezzoZonale.2023.MeseOra <- matrix(rep(0, 24*12), 12, 24)
+for (i in 1:24){
+  for (j in 1:12){
+    PrezzoZonale.2023.MeseOra[j, i] <-
+      mean(demand.2023$PrezzoZonale[which(demand.2023$Mese==j&demand.2023$Ora==i)])
+  }
+}
+matplot(t(PrezzoZonale.2023.MeseOra), type = 'l', ylab = 'Clearing price',
+        xlab = 'Hours', main = 'Clearing price by month in 2023')
+
+PrezzoZonale.2023.GiornoOra <- matrix(rep(0, 31*24), 31, 24)
+for (i in 1:24){
+  for (j in 1:31){
+    PrezzoZonale.2023.GiornoOra[j, i] <-
+      mean(demand.2023$PrezzoZonale[which(demand.2023$Giorno==j&demand.2023$Ora==i)])
+  }
+}
+
+
+matplot(t(PrezzoZonale.2023.GiornoOra), type = 'l', ylab = 'Clearing price',
+        xlab = 'Hours', main = 'Clearing price by day in 2023')
 
 
 
 
+PrezzoZonale.2023.GiornoSettimanaOra <- matrix(rep(0, 7*12), 7, 24)
+for (i in 1:24){
+  for (j in 1:7){
+    PrezzoZonale.2023.GiornoSettimanaOra[j, i] <-
+      mean(demand.2023$PrezzoZonale[which(demand.2023$GiornoSettimana
+                                          ==levels(demand$GiornoSettimana)[j]
+                                          &demand.2023$Ora==i)])
+  }
+}
+matplot(t(PrezzoZonale.2023.GiornoSettimanaOra), type = 'l', ylab = 'Clearing price',
+        xlab = 'Hours', main = 'Clearing price by weekday in 2023')
 
 
 
