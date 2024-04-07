@@ -5,9 +5,14 @@
 # confrontation with Offer curves for now.
 # Only the pool where all the zones are present is taken into account.
 
+
+# Libraries and data cleaning ---------------------------------------------
 library(dplyr)
 library(lubridate)
 library(fda)
+library(glmnet)
+library(Matrix)
+library(monotone)
 # Necessary to work with "month" and "day" functions
 
 demand <- read.table('DemandBids.txt', header = TRUE)
@@ -24,8 +29,8 @@ demand$Giorno <- day(demand$Data)
 demand$GiornoSettimana <- weekdays(as.Date(demand$Data))
 
 demand$GiornoSettimana <- factor(demand$GiornoSettimana,
-        levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
-                    "Saturday", "Sunday"), ordered = TRUE)
+          levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+                      "Saturday", "Sunday"), ordered = TRUE)
 
 # Cumulative quantity (Called Volume):
 demand <- demand %>% 
@@ -41,11 +46,18 @@ dimnames(demand)
 
 demand.2022 <- demand[which(demand$Anno==2022),]
 demand.2023 <- demand[which(demand$Anno==2023),]
+save(demand, file = 'demand.RData')
+save(demand.2022, file = 'demand.2022.RData')
+save(demand.2023, file = 'demand.2023.RData')
 
-# Preliminary EDA ---------------------------------------------------------
+# PRELIMINARY EDA ---------------------------------------------------------
 # Treating hours separately (and considering daily time series), we look at
 # similarities within day type and month. So: hour/day/month (for two and a half
 # year). We notice trends in the data.
+
+load('demand.RData')
+load('demand.2022.RData')
+load('demand.2023.RData')
 
 # Boxplots ----------------------------------------------------------------
 
@@ -146,11 +158,11 @@ PrezzoZonale.2022.months.var = NULL
 PrezzoZonale.2022.months.sd = NULL
 for (i in 1:12){
   PrezzoZonale.2022.months.mean[i] = mean(demand.2022$PrezzoZonale
-                  [which(demand.2022$Mese==i)])
+                                          [which(demand.2022$Mese==i)])
   PrezzoZonale.2022.months.var[i] = var(demand.2022$PrezzoZonale
-                  [which(demand.2022$Mese==i)])
+                                        [which(demand.2022$Mese==i)])
   PrezzoZonale.2022.months.sd[i] = sd(demand.2022$PrezzoZonale
-                  [which(demand.2022$Mese==i)])
+                                      [which(demand.2022$Mese==i)])
 }
 # Clearing price by hours - 2022
 PrezzoZonale.2022.hours.mean = NULL
@@ -158,11 +170,40 @@ PrezzoZonale.2022.hours.var = NULL
 PrezzoZonale.2022.hours.sd = NULL
 for (i in 1:24){
   PrezzoZonale.2022.hours.mean[i] = mean(demand.2022$PrezzoZonale
-                        [which(demand.2022$Ora==i)])
+                                         [which(demand.2022$Ora==i)])
   PrezzoZonale.2022.hours.var[i] = var(demand.2022$PrezzoZonale
-                        [which(demand.2022$Ora==i)])
+                                       [which(demand.2022$Ora==i)])
   PrezzoZonale.2022.hours.sd[i] = sd(demand.2022$PrezzoZonale
-                        [which(demand.2022$Ora==i)])
+                                     [which(demand.2022$Ora==i)])
+}
+# Clearing price by days - 2022
+PrezzoZonale.2022.days.mean = NULL
+PrezzoZonale.2022.days.var = NULL
+PrezzoZonale.2022.days.sd = NULL
+for (i in 1:31){
+  PrezzoZonale.2022.days.mean[i] = mean(demand.2022$PrezzoZonale
+                                        [which(demand.2022$Giorno==i)])
+  PrezzoZonale.2022.days.var[i] = var(demand.2022$PrezzoZonale
+                                      [which(demand.2022$Giorno==i)])
+  PrezzoZonale.2022.days.sd[i] = sd(demand.2022$PrezzoZonale
+                                    [which(demand.2022$Giorno==i)])
+}
+# Clearing price by weekdays - 2022
+PrezzoZonale.2022.weekdays.mean = NULL
+PrezzoZonale.2022.weekdays.var = NULL
+PrezzoZonale.2022.weekdays.sd = NULL
+find_weekday_position <- function(levels_vector, target_level) {
+  return(match(target_level, levels_vector))
+}
+
+for (i in levels(demand$GiornoSettimana)){
+  WD <- find_weekday_position(levels(demand$GiornoSettimana), i)
+  PrezzoZonale.2022.weekdays.mean[WD] = mean(demand.2022$PrezzoZonale
+                                             [which(demand.2022$GiornoSettimana==i)])
+  PrezzoZonale.2022.weekdays.var[WD] = var(demand.2022$PrezzoZonale
+                                           [which(demand.2022$GiornoSettimana==i)])
+  PrezzoZonale.2022.weekdays.sd[WD] = sd(demand.2022$PrezzoZonale
+                                         [which(demand.2022$GiornoSettimana==i)])
 }
 
 # Clearing price by months - 2023
@@ -189,112 +230,402 @@ for (i in 1:24){
   PrezzoZonale.2023.hours.sd[i] = sd(demand.2023$PrezzoZonale
                                      [which(demand.2023$Ora==i)])
 }
+# Clearing price by days - 2023
+PrezzoZonale.2023.days.mean = NULL
+PrezzoZonale.2023.days.var = NULL
+PrezzoZonale.2023.days.sd = NULL
+for (i in 1:31){
+  PrezzoZonale.2023.days.mean[i] = mean(demand.2023$PrezzoZonale
+                                        [which(demand.2023$Giorno==i)])
+  PrezzoZonale.2023.days.var[i] = var(demand.2023$PrezzoZonale
+                                      [which(demand.2023$Giorno==i)])
+  PrezzoZonale.2023.days.sd[i] = sd(demand.2023$PrezzoZonale
+                                    [which(demand.2023$Giorno==i)])
+}
+# Clearing price by weekdays - 2023
+PrezzoZonale.2023.weekdays.mean = NULL
+PrezzoZonale.2023.weekdays.var = NULL
+PrezzoZonale.2023.weekdays.sd = NULL
+find_weekday_position <- function(levels_vector, target_level) {
+  return(match(target_level, levels_vector))
+}
+
+for (i in levels(demand$GiornoSettimana)){
+  WD <- find_weekday_position(levels(demand$GiornoSettimana), i)
+  PrezzoZonale.2023.weekdays.mean[WD] = mean(demand.2023$PrezzoZonale
+                                             [which(demand.2023$GiornoSettimana==i)])
+  PrezzoZonale.2023.weekdays.var[WD] = var(demand.2023$PrezzoZonale
+                                           [which(demand.2023$GiornoSettimana==i)])
+  PrezzoZonale.2023.weekdays.sd[WD] = sd(demand.2023$PrezzoZonale
+                                         [which(demand.2023$GiornoSettimana==i)])
+}
 
 
 # Scatter plots -----------------------------------------------------------
 
+# A) Means (months):
 month_mean <- function(){
-par(mfrow = c(1,2))
-plot(PrezzoZonale.2022.months.mean, pch = 16, xlab = 'Months in 2022',
-     ylab = 'Mean clearing price', col = 'blue',
-     ylim = c(0,600))
-abline(h = PrezzoZonale.2022_mean, lty = 2, lwd = 2)
-plot(PrezzoZonale.2023.months.mean, pch = 16, xlab = 'Months in 2023',
-     ylab = 'Mean clearing price', col = 'red',
-     ylim = c(0,600))
-abline(h = PrezzoZonale.2023_mean, lty = 2, lwd = 2)
+  par(mfrow = c(1,2))
+  plot(PrezzoZonale.2022.months.mean, pch = 16, xlab = 'Months in 2022',
+       ylab = 'Mean clearing price', col = 'blue',
+       ylim = c(0,600))
+  abline(h = PrezzoZonale.2022_mean, lty = 2, lwd = 2)
+  plot(PrezzoZonale.2023.months.mean, pch = 16, xlab = 'Months in 2023',
+       ylab = 'Mean clearing price', col = 'red',
+       ylim = c(0,600))
+  abline(h = PrezzoZonale.2023_mean, lty = 2, lwd = 2)
 }
 month_mean()
 #
 
 # B) Means (hours):
 hours_mean <- function(){
-par(mfrow = c(1,2))
-plot(PrezzoZonale.2022.hours.mean, pch = 16, xlab = 'Hours in 2022',
-     ylab = 'Mean clearing price', col = 'blue',
-     ylim = c(0,400))
-abline(h = PrezzoZonale.2022_mean, lty = 2, lwd = 2)
-plot(PrezzoZonale.2023.hours.mean, pch = 16, xlab = 'Hours in 2023',
-     ylab = 'Mean clearing price', col = 'red',
-     ylim = c(0,400))
-abline(h = PrezzoZonale.2023_mean, lty = 2, lwd = 2)
+  par(mfrow = c(1,2))
+  plot(PrezzoZonale.2022.hours.mean, pch = 16, xlab = 'Hours in 2022',
+       ylab = 'Mean clearing price', col = 'blue',
+       ylim = c(0,400))
+  abline(h = PrezzoZonale.2022_mean, lty = 2, lwd = 2)
+  plot(PrezzoZonale.2023.hours.mean, pch = 16, xlab = 'Hours in 2023',
+       ylab = 'Mean clearing price', col = 'red',
+       ylim = c(0,400))
+  abline(h = PrezzoZonale.2023_mean, lty = 2, lwd = 2)
 }
 hours_mean()
 
-# C) Standard deviation (months):
+# C) Means (days):
+day_mean <- function(){
+  par(mfrow = c(1,2))
+  plot(PrezzoZonale.2022.days.mean, pch = 16, xlab = 'Days in 2022',
+       ylab = 'Mean clearing price', col = 'blue',
+       ylim = c(0,600))
+  abline(h = PrezzoZonale.2022_mean, lty = 2, lwd = 2)
+  plot(PrezzoZonale.2023.days.mean, pch = 16, xlab = 'Days in 2023',
+       ylab = 'Mean clearing price', col = 'red',
+       ylim = c(0,600))
+  abline(h = PrezzoZonale.2023_mean, lty = 2, lwd = 2)
+}
+day_mean()
+#
+
+# D) Means (weekdays):
+weekday_mean <- function(){
+  par(mfrow = c(1,2))
+  plot(PrezzoZonale.2022.weekdays.mean, pch = 16, xlab = 'Weekdays in 2022',
+       ylab = 'Mean clearing price', col = 'blue',
+       ylim = c(0,400))
+  abline(h = PrezzoZonale.2022_mean, lty = 2, lwd = 2)
+  plot(PrezzoZonale.2023.weekdays.mean, pch = 16, xlab = 'Weekdays in 2023',
+       ylab = 'Mean clearing price', col = 'red',
+       ylim = c(0,400))
+  abline(h = PrezzoZonale.2023_mean, lty = 2, lwd = 2)
+}
+weekday_mean()
+
+# E) Standard deviation (months):
 month_sd <- function(){
-par(mfrow = c(1,2))
-plot(PrezzoZonale.2022.months.sd, pch = 16, xlab = 'Months in 2022',
-     ylab = 'Clearing price standard deviation', col = 'blue',
-     ylim = c(10, 100))
-abline(h = mean(PrezzoZonale.2022.months.sd), lty = 2, lwd = 2)
-plot(PrezzoZonale.2023.months.sd, pch = 16, xlab = 'Months in 2023',
-     ylab = 'Clearing price standard deviation', col = 'red',
-     ylim = c(10, 100))
-abline(h = mean(PrezzoZonale.2023.months.sd), lty = 2, lwd = 2)
+  par(mfrow = c(1,2))
+  plot(PrezzoZonale.2022.months.sd, pch = 16, xlab = 'Months in 2022',
+       ylab = 'Clearing price standard deviation', col = 'blue',
+       ylim = c(10, 100))
+  abline(h = mean(PrezzoZonale.2022.months.sd), lty = 2, lwd = 2)
+  plot(PrezzoZonale.2023.months.sd, pch = 16, xlab = 'Months in 2023',
+       ylab = 'Clearing price standard deviation', col = 'red',
+       ylim = c(10, 100))
+  abline(h = mean(PrezzoZonale.2023.months.sd), lty = 2, lwd = 2)
 }
 month_sd()
 # We don't compare here with total variability because it doesn't make sense,
 # only with the mean of all the standard deviations
 
-# D) Standard deviation (hours):
+# F) Standard deviation (hours):
 hours_sd = function(){
-par(mfrow = c(1,2))
-plot(PrezzoZonale.2022.hours.sd, pch = 16, xlab = 'Hours in 2022',
-     ylab = 'Clearing price standard deviation', col = 'blue',
-     ylim = c(10, 160))
-abline(h = mean(PrezzoZonale.2022.hours.sd), lty = 2, lwd = 2)
-plot(PrezzoZonale.2023.hours.sd, pch = 16, xlab = 'Hours in 2023',
-     ylab = 'Clearing price standard deviation', col = 'red',
-     ylim = c(10, 160))
-abline(h = mean(PrezzoZonale.2023.hours.sd), lty = 2, lwd = 2)
+  par(mfrow = c(1,2))
+  plot(PrezzoZonale.2022.hours.sd, pch = 16, xlab = 'Hours in 2022',
+       ylab = 'Clearing price standard deviation', col = 'blue',
+       ylim = c(10, 160))
+  abline(h = mean(PrezzoZonale.2022.hours.sd), lty = 2, lwd = 2)
+  plot(PrezzoZonale.2023.hours.sd, pch = 16, xlab = 'Hours in 2023',
+       ylab = 'Clearing price standard deviation', col = 'red',
+       ylim = c(10, 160))
+  abline(h = mean(PrezzoZonale.2023.hours.sd), lty = 2, lwd = 2)
 }
 hours_sd()
 
-# There doesn't seem to be a trend in days and weekdays, so it makes no sense
-# to create a scatterplot of mean or standard deviation
+# G) sds (days):
+day_sd <- function(){
+  par(mfrow = c(1,2))
+  plot(PrezzoZonale.2022.days.sd, pch = 16, xlab = 'Days in 2022',
+       ylab = 'sd clearing price', col = 'blue',
+       ylim = c(0,600))
+  abline(h = PrezzoZonale.2022_sd, lty = 2, lwd = 2)
+  plot(PrezzoZonale.2023.days.sd, pch = 16, xlab = 'Days in 2023',
+       ylab = 'sd clearing price', col = 'red',
+       ylim = c(0,600))
+  abline(h = PrezzoZonale.2023_sd, lty = 2, lwd = 2)
+}
+day_sd()
+#
 
-# Functional Data Analysis: Smoothing -------------------------------------
-
-domain <- range(demand$Volume)
-norder <- 4
-nbasis <- 20
-demand.basis <- create.bspline.basis(rangeval = domain, nbasis = nbasis, 
-                               norder = norder)
-prova <- data.frame(
-   volume = demand$Volume[which(demand$Data=="2022-02-06"&demand$Ora==8)],
-   prezzo = demand$Prezzo[which(demand$Data=="2022-02-06"&demand$Ora==8)]
-)
-Xobs0 <- prova$prezzo
-abscissa <- prova$volume
-NT <- length(abscissa) # number of locations of observations
-
-plot(abscissa,Xobs0,xlab="t",ylab="observed data")
-plot(abscissa,Xobs0,xlab="t",ylab="observed data", type = "l")
-
-data_to_smooth <- demand$Volume[which(demand$Data == "2022-02-06" & demand$Ora == 8)]
-basismat <- eval.basis(data_to_smooth, demand.basis)
-demandfd <- smooth.basis(data_to_smooth, basismat, demand.basis, method = "spline")
-plot(demandfd)
-
-
-
-
-
+# H) sds (weekdays):
+weekday_sd <- function(){
+  par(mfrow = c(1,2))
+  plot(PrezzoZonale.2022.weekdays.sd, pch = 16, xlab = 'Weekdays in 2022',
+       ylab = 'sd clearing price', col = 'blue',
+       ylim = c(0,400))
+  abline(h = PrezzoZonale.2022_sd, lty = 2, lwd = 2)
+  plot(PrezzoZonale.2023.weekdays.sd, pch = 16, xlab = 'Weekdays in 2023',
+       ylab = 'sd clearing price', col = 'red',
+       ylim = c(0,400))
+  abline(h = PrezzoZonale.2023_sd, lty = 2, lwd = 2)
+}
+weekday_sd()
 
 
+# Matplots ---------------------------------------------------------------
+# BY MONTHS:
+# In 2022:
+PrezzoZonale.2022.OraMese <- matrix(rep(0, 24*12), 24, 12)
+for (i in 1:12){
+  for (j in 1:24){
+    PrezzoZonale.2022.OraMese[j, i] <-
+      mean(demand.2022$PrezzoZonale[which(demand.2022$Ora==j&demand.2022$Mese==i)])
+  }
+}
+matplot(t(PrezzoZonale.2022.OraMese), type = 'l', ylab = 'Clearing price',
+        xlab = 'Months', main = 'Clearing price by hour in 2022')
+
+PrezzoZonale.2022.GiornoMese <- matrix(rep(0, 31*12), 31, 12)
+for (i in 1:12){
+  for (j in 1:31){
+    PrezzoZonale.2022.GiornoMese[j, i] <-
+      mean(demand.2022$PrezzoZonale[which(demand.2022$Giorno==j&demand.2022$Mese==i)])
+  }
+}
+matplot(t(PrezzoZonale.2022.GiornoMese), type = 'l', ylab = 'Clearing price',
+        xlab = 'Months', main = 'Clearing price by day in 2022')
+
+PrezzoZonale.2022.GiornoSettimanaMese <- matrix(rep(0, 7*12), 7, 12)
+for (i in 1:12){
+  for (j in 1:7){
+    PrezzoZonale.2022.GiornoSettimanaMese[j, i] <-
+      mean(demand.2022$PrezzoZonale[which(demand.2022$GiornoSettimana
+                                          ==levels(demand$GiornoSettimana)[j]
+                                          &demand.2022$Mese==i)])
+  }
+}
+matplot(t(PrezzoZonale.2022.GiornoSettimanaMese), type = 'l', ylab = 'Clearing price',
+        xlab = 'Months', main = 'Clearing price by weekday in 2022')
+
+# In 2023:
+PrezzoZonale.2023.OraMese <- matrix(rep(0, 24*12), 24, 12)
+for (i in 1:12){
+  for (j in 1:24){
+    PrezzoZonale.2023.OraMese[j, i] <-
+      mean(demand.2023$PrezzoZonale[which(demand.2023$Ora==j&demand.2023$Mese==i)])
+  }
+}
+matplot(t(PrezzoZonale.2023.OraMese), type = 'l', ylab = 'Clearing price',
+        xlab = 'Months', main = 'Clearing price by hour in 2023')
+
+PrezzoZonale.2023.GiornoMese <- matrix(rep(0, 31*12), 31, 12)
+for (i in 1:12){
+  for (j in 1:31){
+    PrezzoZonale.2023.GiornoMese[j, i] <-
+      mean(demand.2023$PrezzoZonale[which(demand.2023$Giorno==j&demand.2023$Mese==i)])
+  }
+}
+matplot(t(PrezzoZonale.2023.GiornoMese), type = 'l', ylab = 'Clearing price',
+        xlab = 'Months', main = 'Clearing price by day in 2023')
+
+PrezzoZonale.2023.GiornoSettimanaMese <- matrix(rep(0, 7*12), 7, 12)
+for (i in 1:12){
+  for (j in 1:7){
+    PrezzoZonale.2023.GiornoSettimanaMese[j, i] <-
+      mean(demand.2023$PrezzoZonale[which(demand.2023$GiornoSettimana
+                                          ==levels(demand$GiornoSettimana)[j]
+                                          &demand.2023$Mese==i)])
+  }
+}
+matplot(t(PrezzoZonale.2023.GiornoSettimanaMese), type = 'l', ylab = 'Clearing price',
+        xlab = 'Months', main = 'Clearing price by weekday in 2023')
+
+# BY HOURS:
+# In 2022:
+PrezzoZonale.2022.MeseOra <- matrix(rep(0, 24*12), 12, 24)
+for (i in 1:24){
+  for (j in 1:12){
+    PrezzoZonale.2022.MeseOra[j, i] <-
+      mean(demand.2022$PrezzoZonale[which(demand.2022$Mese==j&demand.2022$Ora==i)])
+  }
+}
+matplot(t(PrezzoZonale.2022.MeseOra), type = 'l', ylab = 'Clearing price',
+        xlab = 'Hours', main = 'Clearing price by month in 2022')
+
+PrezzoZonale.2022.GiornoOra <- matrix(rep(0, 31*24), 31, 24)
+for (i in 1:24){
+  for (j in 1:31){
+    PrezzoZonale.2022.GiornoOra[j, i] <-
+      mean(demand.2022$PrezzoZonale[which(demand.2022$Giorno==j&demand.2022$Ora==i)])
+  }
+}
+matplot(t(PrezzoZonale.2022.GiornoOra), type = 'l', ylab = 'Clearing price',
+        xlab = 'Hours', main = 'Clearing price by day in 2022')
+
+PrezzoZonale.2022.GiornoSettimanaOra <- matrix(rep(0, 7*12), 7, 24)
+for (i in 1:24){
+  for (j in 1:7){
+    PrezzoZonale.2022.GiornoSettimanaOra[j, i] <-
+      mean(demand.2022$PrezzoZonale[which(demand.2022$GiornoSettimana
+                                          ==levels(demand$GiornoSettimana)[j]
+                                          &demand.2022$Ora==i)])
+  }
+}
+matplot(t(PrezzoZonale.2022.GiornoSettimanaOra), type = 'l', ylab = 'Clearing price',
+        xlab = 'Hours', main = 'Clearing price by weekday in 2022')
+
+# In 2023:
+PrezzoZonale.2023.MeseOra <- matrix(rep(0, 24*12), 12, 24)
+for (i in 1:24){
+  for (j in 1:12){
+    PrezzoZonale.2023.MeseOra[j, i] <-
+      mean(demand.2023$PrezzoZonale[which(demand.2023$Mese==j&demand.2023$Ora==i)])
+  }
+}
+matplot(t(PrezzoZonale.2023.MeseOra), type = 'l', ylab = 'Clearing price',
+        xlab = 'Hours', main = 'Clearing price by month in 2023')
+
+PrezzoZonale.2023.GiornoOra <- matrix(rep(0, 31*24), 31, 24)
+for (i in 1:24){
+  for (j in 1:31){
+    PrezzoZonale.2023.GiornoOra[j, i] <-
+      mean(demand.2023$PrezzoZonale[which(demand.2023$Giorno==j&demand.2023$Ora==i)])
+  }
+}
+
+
+matplot(t(PrezzoZonale.2023.GiornoOra), type = 'l', ylab = 'Clearing price',
+        xlab = 'Hours', main = 'Clearing price by day in 2023')
 
 
 
 
+PrezzoZonale.2023.GiornoSettimanaOra <- matrix(rep(0, 7*12), 7, 24)
+for (i in 1:24){
+  for (j in 1:7){
+    PrezzoZonale.2023.GiornoSettimanaOra[j, i] <-
+      mean(demand.2023$PrezzoZonale[which(demand.2023$GiornoSettimana
+                                          ==levels(demand$GiornoSettimana)[j]
+                                          &demand.2023$Ora==i)])
+  }
+}
+matplot(t(PrezzoZonale.2023.GiornoSettimanaOra), type = 'l', ylab = 'Clearing price',
+        xlab = 'Hours', main = 'Clearing price by weekday in 2023')
 
 
+# FUNCTIONAL DATA ANALYSIS -------------------------------------
 
-# Functional Data Analysis: Functional PCA --------------------------------
+# FDA: Basis definition and regression model -----------------------------------------
+initial_date <- as.Date("2022-01-01")
+final_date <- as.Date("2023-12-31")
+date_range <- seq(initial_date, final_date, by = "day")
 
+# Since domains are different each time, we decide to normalize between 0 and 1
+# and to insert in data.clear the minimum and maximum volumes.
 
+# Create B-spline basis
+norder <- 6
+nbasis <- 12 # can be changed later
+demand.basis <- create.bspline.basis(rangeval = c(0,1),
+                                     norder = norder,
+                                     nbasis = nbasis)
 
+# Initialize an empty dataframe
+demand.clear <- data.frame(Date = character(),
+                           Hour = numeric(),
+                           Vmin = numeric(),
+                           Vmax = numeric(),
+                           DemandBids = I(list()))
 
+# Function to process data for each day and hour
+process_data <- function(g, h, demand, demand.basis) {
+  vmin <- min(demand$Volume[which(demand$Data == g & demand$Ora == h)])
+  vmax <- max(demand$Volume[which(demand$Data == g & demand$Ora == h)])
+  v <- demand$Volume[which(demand$Data == g & demand$Ora == h)]
+  
+  # Normalization
+  norm_v <- (v - vmin) / (vmax - vmin)
+  
+  pricemat <- demand$Prezzo[which(demand$Data == g & demand$Ora == h)]
+  
+  # Evaluate basis functions at data points
+  basismat <- eval.basis(evalarg = norm_v, basisobj = demand.basis)
+  
+  # Fit linear regression model
+  pricecoef <- lsfit(x = basismat, y = pricemat, intercept = FALSE)$coef
+  
+  return(data.frame(Date = g,
+                    Hour = h,
+                    Vmin = vmin,
+                    Vmax = vmax,
+                    DemandBids = I(list(pricecoef)),
+                    Basismat = I(list(basismat))))
+}
+
+# Use lapply to process data for each day and hour
+processed_data <- lapply(as.character(date_range), function(g) {
+  Ore <- unique(demand$Ora[which(demand$Data == g)])
+  lapply(Ore, function(h) process_data(g, h, demand, demand.basis))
+})
+
+# Combine the results into a single dataframe
+demand.clear <- do.call(rbind, unlist(processed_data, recursive = FALSE))
+
+# Add year, month, day and weekday:
+demand.clear$Year <- year(demand.clear$Date)
+demand.clear$Month <- month(demand.clear$Date)
+demand.clear$Day <- day(demand.clear$Date)
+demand.clear$WeekDay <- weekdays(as.Date(demand.clear$Date))
+demand.clear$WeekDay <- factor(demand.clear$WeekDay,
+                               levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+                                          "Saturday", "Sunday"), ordered = TRUE)
+demand.clear.2022 <- demand.clear[which(demand.clear$Year==2022),]
+demand.clear.2023 <- demand.clear[which(demand.clear$Year==2023),]
+
+# Save as RData:
+save(demand.clear, file = 'demand.clear.RData')
+save(demand.clear.2022, file = 'demand.clear.2022.RData')
+save(demand.clear.2023, file = 'demand.clear.2023.RData')
+
+# Now we have coefficients and Basismat for functional data objects in the
+# dataframe, avoiding missing data. They're also indexed by date.
+
+# FDA: smoothing: --------------------------------------------------------------
+load("demand.clear.RData")
+
+# Extract coefficients from the DemandBids column of the first row
+coefficients <- unlist(demand.clear$DemandBids[82])
+
+# Create the domain values
+domain <- seq(0, 1, by = 0.01)
+
+# Evaluate the basis functions at the domain values
+basismat_domain <- eval.basis(evalarg = domain, basisobj = demand.basis)
+
+# Compute the fitted values using the basis matrix
+fitted_values <- basismat_domain %*% coefficients
+
+pricefdPar <- fdPar(fdobj = demand.basis, Lfdobj = 4, lambda = 0.01)
+
+# Smooth the fitted values using smooth.monotone with roughness penalty
+smoothed_values <- smooth.monotone(domain, fitted_values,
+                    pricefdPar)$y
+
+# Plot the smoothed values
+plot(domain, smoothed_values, type = 'l', xlab = 'Domain',
+     ylab = 'Smoothed Values', main = 'Smoothed Values Plot')
+
+# Optionally, compute additional quantities based on the smoothed values
+# For example, you can compute derivatives, confidence intervals, etc.
 
 
 
