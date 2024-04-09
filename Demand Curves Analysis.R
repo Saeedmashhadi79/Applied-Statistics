@@ -531,7 +531,7 @@ date_range <- seq(initial_date, final_date, by = "day")
 # Create B-spline basis
 norder <- 6
 nbasis <- 15 # can be changed later
-demand.basis <- create.bspline.basis(rangeval = c(0,1),
+bspline.basis <- create.bspline.basis(rangeval = c(0,1),
                                      norder = norder,
                                      nbasis = nbasis)
 
@@ -550,7 +550,7 @@ demand.clear <- data.frame(Date = character(),
 lambda_range <- 10^seq(-4, -1 ,by = 0.25)
 
 # Function to process data for each day and hour
-process_data <- function(g, h, demand, demand.basis) {
+process_data <- function(g, h, demand, bspline.basis) {
   vmin <- min(demand$Volume[which(demand$Data == g & demand$Ora == h)])
   vmax <- max(demand$Volume[which(demand$Data == g & demand$Ora == h)])
   v <- demand$Volume[which(demand$Data == g & demand$Ora == h)]
@@ -561,13 +561,13 @@ process_data <- function(g, h, demand, demand.basis) {
   pricemat <- demand$Prezzo[which(demand$Data == g & demand$Ora == h)]
   
   # Evaluate basis functions at data points
-  basismat <- eval.basis(evalarg = norm_v, basisobj = demand.basis)
+  basismat <- eval.basis(evalarg = norm_v, basisobj = bspline.basis)
   
   best_lambda <- NULL
   min_gcv <- Inf
   
   for (lambda in lambda_range) {
-    functionalPar <- fdPar(fdobj = demand.basis, Lfdobj=3, lambda = lambda)
+    functionalPar <- fdPar(fdobj = bspline.basis, Lfdobj=3, lambda = lambda)
     gcv <- smooth.basis(norm_v, pricemat, functionalPar)$gcv
     
     # Check if current GCV is the smallest so far
@@ -578,7 +578,7 @@ process_data <- function(g, h, demand, demand.basis) {
   }
   
   # Smoothed Values:
-  functionalPar <- fdPar(fdobj = demand.basis, Lfdobj=3, lambda = best_lambda)
+  functionalPar <- fdPar(fdobj = bspline.basis, Lfdobj=3, lambda = best_lambda)
   smoothed_fd <- smooth.basis(norm_v, pricemat, functionalPar)$fd
   smoothed <- eval.fd(norm_v, smoothed_fd, Lfd = 0)
   # Fit linear regression model
@@ -597,7 +597,7 @@ process_data <- function(g, h, demand, demand.basis) {
 # Use lapply to process data for each day and hour
 processed_data <- lapply(as.character(date_range), function(g) {
   Ore <- unique(demand$Ora[which(demand$Data == g)])
-  lapply(Ore, function(h) process_data(g, h, demand, demand.basis))
+  lapply(Ore, function(h) process_data(g, h, demand, bspline.basis))
 })
 
 # Combine the results into a single dataframe
@@ -624,7 +624,7 @@ save(demand.clear, file = 'demand.clear.RData')
 save(demand.clear.2022, file = 'demand.clear.2022.RData')
 save(demand.clear.2023, file = 'demand.clear.2023.RData')
 save(prezzozonale, file = 'prezzozonale.RData')
-save(demand.basis, file = 'demand.basis.RData')
+save(bspline.basis, file = 'bspline.basis.RData')
 
 # Now we have coefficients and Basismat for functional data objects in the
 # dataframe, avoiding missing data. They're also indexed by date.
@@ -636,9 +636,12 @@ load("demand.clear.2022.RData")
 load("demand.clear.2023.RData")
 load("prezzozonale.RData")
 
+par(mfrow = c(1, 1))
+plot (bspline.basis)
+
 # Define domain to plot:
 domain <- seq(0, 1, by = 0.01)
-basismat_domain <- eval.basis(evalarg = domain, basisobj = demand.basis)
+basismat_domain <- eval.basis(evalarg = domain, basisobj = bspline.basis)
 
 # Definition of useful indexes:
 index_day <- function(y, m, d){ # all hours in a day
