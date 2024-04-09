@@ -669,13 +669,37 @@ index_month <- function(y, d, h){ # all months, for an hour in a day in a year
           demand.clear$Year == y)
 }
 
+index_moment <- function(y, m, d, h){
+  which(demand.clear$Hour == h &
+          demand.clear$Day == d &
+          demand.clear$Year == y &
+          demand.clear$Month == m)
+}
+
+par(mfrow = c(1,1))
+y = 2022
+m = 8
+d = 15
+h = 10
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Smoothed and Real Prices',
+     main = paste('DEMAND: y', y, ', m', m, ', d', d, ' h', h))
+ind <- index_moment(y, m, d, h)
+coefficients <- unlist(demand.clear$DemandBidsCoef[ind])
+smoothed <- basismat_domain %*% coefficients
+lines(domain, smoothed, col = "#CCA300", lwd = 1.5)
+norm_v <- demand.clear$NormV[[ind]]
+prezzi <- demand.clear$Prezzi[[ind]]
+points(norm_v, prezzi, col = "#FF4500")
+lines(norm_v, prezzi, lty = 2, col = "#FFA500")
+
 par(mfrow = c(1, 2))
-y = 2023
+y = 2022
 m = 8
 d = 15
 plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
      xlab = 'Volume fraction', ylab = 'Smoothed Prices',
-     main = paste('y', y, ', m', m, ', d', d))
+     main = paste('DEMAND: y', y, ', m', m, ', d', d))
 colors <- rainbow(length(index_day(y, m, d)))
 j = 1
 for (i in index_day(y, m ,d)){
@@ -687,7 +711,7 @@ for (i in index_day(y, m ,d)){
 
 plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
      xlab = 'Volume fraction', ylab = 'Real prices',
-     main = paste('y', y, ', m', m, ', d', d))
+     main = paste('DEMAND: y', y, ', m', m, ', d', d))
 j = 1
 for (i in index_day(y, m ,d)){
   norm_v <- demand.clear$NormV[[i]]
@@ -698,11 +722,11 @@ for (i in index_day(y, m ,d)){
 
 par(mfrow = c(1, 2))
 y = 2022
-m = 1
-h = 23
+m = 8
+h = 21
 plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
      xlab = 'Volume fraction', ylab = 'Smoothed Prices',
-     main = paste('y', y, ', m', m, ', h', h))
+     main = paste('DEMAND: y', y, ', m', m, ', h', h))
 colors <- rainbow(length(index_hour(y, m, h)))
 j = 1
 for (i in index_hour(y, m ,h)){
@@ -714,7 +738,7 @@ for (i in index_hour(y, m ,h)){
 
 plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
      xlab = 'Volume fraction', ylab = 'Real Prices',
-     main = paste('y', y, ', m', m, ', h', h))
+     main = paste('DEMAND: y', y, ', m', m, ', h', h))
 j = 1
 for (i in index_hour(y, m ,h)){
   norm_v <- demand.clear$NormV[[i]]
@@ -728,7 +752,7 @@ h = 19
 d = 1
 plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
      xlab = 'Volume fraction', ylab = 'Smoothed Prices',
-     main = paste('h', h, ', d', d))
+     main = paste('DEMAND: h', h, ', d', d))
 colors <- rainbow(length(index_yearmonth(d, h)))
 j = 1
 for (i in index_yearmonth(d, h)){
@@ -740,7 +764,7 @@ for (i in index_yearmonth(d, h)){
 
 plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
      xlab = 'Volume fraction', ylab = 'Real prices',
-     main = paste('h', h, ', d', d))
+     main = paste('DEMAND: h', h, ', d', d))
 j = 1
 for (i in index_yearmonth(d, h)){
   norm_v <- demand.clear$NormV[[i]]
@@ -755,7 +779,7 @@ h = 19
 d = 1
 plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
      xlab = 'Volume fraction', ylab = 'Smoothed Prices',
-     main = paste('y', y, ', h', h, ', d', d))
+     main = paste('DEMAND: y', y, ', h', h, ', d', d))
 colors <- rainbow(length(index_month(2023, d, h)))
 j = 1
 for (i in index_month(y, d, h)){
@@ -767,7 +791,7 @@ for (i in index_month(y, d, h)){
 
 plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
      xlab = 'Volume fraction', ylab = 'Real prices',
-     main = paste('y', y, ', h', h, ', d', d))
+     main = paste('DEMAND: y', y, ', h', h, ', d', d))
 j = 1
 for (i in index_month(y, d, h)){
   norm_v <- demand.clear$NormV[[i]]
