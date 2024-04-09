@@ -58,7 +58,7 @@ save(offer.2023, file = 'offer.2023.RData')
 
 # FDA: Basis definition and regression model -----------------------------------------
 initial_date <- as.Date("2022-01-01")
-final_date <- as.Date("2022-01-01")
+final_date <- as.Date("2023-12-31")
 date_range <- seq(initial_date, final_date, by = "day")
 
 # Since domains are different each time, we decide to normalize between 0 and 1
@@ -66,7 +66,7 @@ date_range <- seq(initial_date, final_date, by = "day")
 
 # Create B-spline basis
 norder <- 6
-nbasis <- 15 # can be changed later
+nbasis <- 18 # can be changed later
 bspline.basis <- create.bspline.basis(rangeval = c(0,1),
                                       norder = norder,
                                       nbasis = nbasis)
@@ -95,16 +95,18 @@ process_data <- function(g, h, offer, bspline.basis) {
   norm_v <- (v - vmin) / (vmax - vmin)
   
   pricemat <- offer$Prezzo[which(offer$Data == g & offer$Ora == h)]
+  domain <- seq(0, 1, by = 0.01)
+  interpolated <- approx(norm_v, pricemat, xout = domain, method = "linear")
   
-  # Evaluate basis functions at data points
-  basismat <- eval.basis(evalarg = norm_v, basisobj = bspline.basis)
+  # Evaluate basis functions at domain points
+  basismat <- eval.basis(evalarg = domain, basisobj = bspline.basis)
   
   best_lambda <- NULL
   min_gcv <- Inf
   
   for (lambda in lambda_range) {
     functionalPar <- fdPar(fdobj = bspline.basis, Lfdobj=3, lambda = lambda)
-    gcv <- smooth.basis(norm_v, pricemat, functionalPar)$gcv
+    gcv <- smooth.basis(domain, interpolated$y, functionalPar)$gcv
     
     # Check if current GCV is the smallest so far
     if (gcv < min_gcv & length(gcv)!= 0) {
@@ -115,8 +117,9 @@ process_data <- function(g, h, offer, bspline.basis) {
   
   # Smoothed Values:
   functionalPar <- fdPar(fdobj = bspline.basis, Lfdobj=3, lambda = best_lambda)
-  smoothed_fd <- smooth.basis(norm_v, pricemat, functionalPar)$fd
-  smoothed <- eval.fd(norm_v, smoothed_fd, Lfd = 0)
+  smoothed_fd <- smooth.basis(domain, interpolated$y, functionalPar)$fd
+  smoothed <- eval.fd(domain, smoothed_fd, Lfd = 0)
+  
   # Fit linear regression model
   pricecoef <- lsfit(x = basismat, y = smoothed, intercept = FALSE)$coef
   
@@ -204,9 +207,9 @@ index_month <- function(y, d, h){ # all months, for an hour in a day in a year
 }
 
 par(mfrow = c(1, 2))
-y = 2022
-m = 1
-d = 1
+y = 2023
+m = 8
+d = 15
 plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
      xlab = 'Volume fraction', ylab = 'Smoothed Prices',
      main = paste('y', y, ', m', m, ', d', d))
@@ -232,7 +235,7 @@ for (i in index_day(y, m ,d)){
 
 par(mfrow = c(1, 2))
 y = 2022
-m = 4
+m = 1
 h = 23
 plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
      xlab = 'Volume fraction', ylab = 'Smoothed Prices',
