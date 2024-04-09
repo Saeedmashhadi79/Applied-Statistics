@@ -206,13 +206,37 @@ index_month <- function(y, d, h){ # all months, for an hour in a day in a year
           offer.clear$Year == y)
 }
 
+index_moment <- function(y, m, d, h){
+  which(offer.clear$Hour == h &
+          offer.clear$Day == d &
+          offer.clear$Year == y &
+          offer.clear$Month == m)
+}
+
+par(mfrow = c(1,1))
+y = 2022
+m = 8
+d = 15
+h = 10
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Smoothed and Real Prices',
+     main = paste('OFFER: y', y, ', m', m, ', d', d, ' h', h))
+ind <- index_moment(y, m, d, h)
+coefficients <- unlist(offer.clear$offerBidsCoef[ind])
+smoothed <- basismat_domain %*% coefficients
+lines(domain, smoothed, col = "#006400", lwd = 1.5)
+norm_v <- offer.clear$NormV[[ind]]
+prezzi <- offer.clear$Prezzi[[ind]]
+points(norm_v, prezzi, col = "#0000FF")
+lines(norm_v, prezzi, lty = 2, col = "#00BFFF")
+
 par(mfrow = c(1, 2))
-y = 2023
+y = 2022
 m = 8
 d = 15
 plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
      xlab = 'Volume fraction', ylab = 'Smoothed Prices',
-     main = paste('y', y, ', m', m, ', d', d))
+     main = paste(' OFFER: y', y, ', m', m, ', d', d))
 colors <- rainbow(length(index_day(y, m, d)))
 j = 1
 for (i in index_day(y, m ,d)){
@@ -224,7 +248,7 @@ for (i in index_day(y, m ,d)){
 
 plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
      xlab = 'Volume fraction', ylab = 'Real prices',
-     main = paste('y', y, ', m', m, ', d', d))
+     main = paste(' OFFER: y', y, ', m', m, ', d', d))
 j = 1
 for (i in index_day(y, m ,d)){
   norm_v <- offer.clear$NormV[[i]]
@@ -235,11 +259,11 @@ for (i in index_day(y, m ,d)){
 
 par(mfrow = c(1, 2))
 y = 2022
-m = 1
-h = 23
+m = 8
+h = 21
 plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
      xlab = 'Volume fraction', ylab = 'Smoothed Prices',
-     main = paste('y', y, ', m', m, ', h', h))
+     main = paste(' OFFER: y', y, ', m', m, ', h', h))
 colors <- rainbow(length(index_hour(y, m, h)))
 j = 1
 for (i in index_hour(y, m ,h)){
@@ -248,3 +272,68 @@ for (i in index_hour(y, m ,h)){
   lines(domain, smoothed, col = colors[j])
   j = j + 1
 }
+
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Real Prices',
+     main = paste('OFFER: y', y, ', m', m, ', h', h))
+j = 1
+for (i in index_hour(y, m ,h)){
+  norm_v <- offer.clear$NormV[[i]]
+  prezzi <- offer.clear$Prezzi[[i]]
+  lines(norm_v, prezzi, col = colors[j])
+  j = j + 1
+}
+
+par(mfrow = c(1, 2))
+h = 19
+d = 1
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Smoothed Prices',
+     main = paste('OFFER: h', h, ', d', d))
+colors <- rainbow(length(index_yearmonth(d, h)))
+j = 1
+for (i in index_yearmonth(d, h)){
+  coefficients <- unlist(offer.clear$offerBidsCoef[i])
+  smoothed <- basismat_domain %*% coefficients
+  lines(domain, smoothed, col = colors[j])
+  j = j + 1
+}
+
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Real prices',
+     main = paste('OFFER: h', h, ', d', d))
+j = 1
+for (i in index_yearmonth(d, h)){
+  norm_v <- offer.clear$NormV[[i]]
+  prezzi <- offer.clear$Prezzi[[i]]
+  lines(norm_v, prezzi, col = colors[j])
+  j = j + 1
+}
+
+par(mfrow = c(1, 2))
+y = 2022
+h = 19
+d = 1
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Smoothed Prices',
+     main = paste('OFFER: y', y, ', h', h, ', d', d))
+colors <- rainbow(length(index_month(2023, d, h)))
+j = 1
+for (i in index_month(y, d, h)){
+  coefficients <- unlist(offer.clear$offerBidsCoef[i])
+  smoothed <- basismat_domain %*% coefficients
+  lines(domain, smoothed, col = colors[j])
+  j = j + 1
+}
+
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Real prices',
+     main = paste('OFFER: y', y, ', h', h, ', d', d))
+j = 1
+for (i in index_month(y, d, h)){
+  norm_v <- offer.clear$NormV[[i]]
+  prezzi <- offer.clear$Prezzi[[i]]
+  lines(norm_v, prezzi, col = colors[j])
+  j = j + 1
+}
+
