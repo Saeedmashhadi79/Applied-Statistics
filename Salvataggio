@@ -1,0 +1,356 @@
+# Offer bids analysis:
+# Offer bids are taken into account for each hour, using data coming from GME
+# from 2022-01-01 to 2023-12-31 (YYYY-MM-DD) at each day and hour,
+# analyzing these functions (knowing PrezzoZonale too, the intersection) without
+# confrontation with demand curves for now.
+# Only the pool where all the zones are present is taken into account.
+
+# Libraries and data cleaning ---------------------------------------------
+library(dplyr)
+library(lubridate)
+library(fda)
+library(glmnet)
+library(Matrix)
+library(monotone)
+library(fastICA)
+library(ggplot2)
+# Necessary to work with "month" and "day" functions
+
+offer <- read.table('OfferBids.txt', header = TRUE)
+# Remove negative data:
+offer <- offer[which(offer$Prezzo > 0 &
+                         offer$Prezzo != 3000 & offer$Prezzo != 4000), ]
+# We notice that negative values are used to close hours, and 3000 to open
+
+# Working in hours, Prezzo is a function of volume; in days, months and years,
+# required output is PrezzoZonale. Converting dates in a more suitable form:
+
+offer$Anno <- year(offer$Data)
+offer$Mese <- month(offer$Data)
+offer$Giorno <- day(offer$Data)
+offer$GiornoSettimana <- weekdays(as.Date(offer$Data))
+
+offer$GiornoSettimana <- factor(offer$GiornoSettimana,
+              levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+                            "Saturday", "Sunday"), ordered = TRUE)
+
+# Reorder:
+offer <- offer %>%
+  group_by(Data, Ora) %>%
+  arrange(as.Date(Data), Ora, Prezzo) %>%
+  ungroup()
+
+# Cumulative quantity (Called Volume):
+offer <- offer %>% 
+  group_by(Data, Ora) %>% 
+  mutate(Volume = cumsum(Quantita)) %>% 
+  ungroup()
+
+# Visualization
+head(offer)
+tail(offer)
+dim(offer)
+dimnames(offer)
+
+offer.2022 <- offer[which(offer$Anno==2022),]
+offer.2023 <- offer[which(offer$Anno==2023),]
+save(offer, file = 'offer.RData')
+save(offer.2022, file = 'offer.2022.RData')
+save(offer.2023, file = 'offer.2023.RData')
+
+# FUNCTIONAL DATA ANALYSIS -------------------------------------
+
+# FDA: Basis definition and regression model -----------------------------------------
+initial_date <- as.Date("2022-01-01")
+final_date <- as.Date("2022-01-01")
+date_range <- seq(initial_date, final_date, by = "day")
+
+# Since domains are different each time, we decide to normalize between 0 and 1
+# and to insert in data.clear the minimum and maximum volumes.
+
+# Create B-spline basis
+norder <- 6
+nbasis <- 18 # can be changed later
+bspline.basis <- create.bspline.basis(rangeval = c(0,1),
+                                      norder = norder,
+                                      nbasis = nbasis)
+
+# Initialize an empty dataframe
+offer.clear <- data.frame(Date = character(),
+                           Hour = numeric(),
+                           Vmax = numeric(),
+                           NormV = I(list()),
+                           Prezzi = I(list()),
+                           OfferBidsCoef = I(list()),
+                           Basismat = I(list())
+)
+
+# Definition of lambda_range:
+lambda_range <- 10^seq(-4, -1 ,by = 0.25)
+
+# Function to process data for each day and hour
+process_data <- function(g, h, offer, bspline.basis) {
+  vmax <- max(offer$Volume[which(offer$Data == g & offer$Ora == h)])
+  v <- c(0, offer$Volume[which(offer$Data == g & offer$Ora == h)])
+  
+  # Normalization
+  norm_v <- v / vmax
+  
+  pricemat <- offer$Prezzo[which(offer$Data == g & offer$Ora == h)]
+  domain <- seq(0, 1, by = 0.005)
+  # Create a step function
+  step_function <- stepfun(x = norm_v, y = c(pricemat[1], pricemat,
+                                      pricemat[length(pricemat)]))
+  steps <- step_function(domain)
+  
+  # Evaluate basis functions at domain points
+  basismat <- eval.basis(evalarg = domain, basisobj = bspline.basis)
+  
+  best_lambda <- NULL
+  min_gcv <- Inf
+  
+  for (lambda in lambda_range) {
+    functionalPar <- fdPar(fdobj = bspline.basis, Lfdobj=4, lambda = lambda)
+    gcv <- smooth.basis(domain, steps, functionalPar)$gcv
+    
+    # Check if current GCV is the smallest so far
+    if (gcv < min_gcv & length(gcv)!= 0) {
+      min_gcv <- gcv
+      best_lambda <- lambda
+    }
+  }
+  
+  # Smoothed Values:
+  functionalPar <- fdPar(fdobj = bspline.basis, Lfdobj=4, lambda = best_lambda)
+  smoothed_fd <- smooth.basis(domain, steps, functionalPar)$fd
+  smoothed <- eval.fd(domain, smoothed_fd, Lfd = 0)
+  # Fit linear regression model
+  pricecoef <- lsfit(x = basismat, y = smoothed, intercept = FALSE)$coef
+  
+  return(data.frame(Date = g,
+                    Hour = h,
+                    Vmax = vmax,
+                    NormV = I(list(norm_v)),
+                    Prezzi = I(list(c(pricemat[1], pricemat))),
+                    OfferBidsCoef = I(list(pricecoef)),
+                    Basismat = I(list(basismat))))
+}
+
+# Use lapply to process data for each day and hour
+processed_data <- lapply(as.character(date_range), function(g) {
+  Ore <- unique(offer$Ora[which(offer$Data == g)])
+  lapply(Ore, function(h) process_data(g, h, offer, bspline.basis))
+})
+
+# Combine the results into a single dataframe
+offer.clear <- do.call(rbind, unlist(processed_data, recursive = FALSE))
+
+# Add year, month, day and weekday:
+offer.clear$Year <- year(offer.clear$Date)
+offer.clear$Month <- month(offer.clear$Date)
+offer.clear$Day <- day(offer.clear$Date)
+offer.clear$WeekDay <- weekdays(as.Date(offer.clear$Date))
+offer.clear$WeekDay <- factor(offer.clear$WeekDay,
+                               levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+                                          "Saturday", "Sunday"), ordered = TRUE)
+offer.clear.2022 <- offer.clear[which(offer.clear$Year==2022),]
+offer.clear.2023 <- offer.clear[which(offer.clear$Year==2023),]
+
+# Create prezzozonale per Date:
+prezzozonale <- offer[, -c(4, 5, 10)]
+prezzozonale <- unique(prezzozonale[, c("Data", "Ora", "PrezzoZonale")])
+rownames(prezzozonale) <- NULL
+
+# Save as RData:
+save(offer.clear, file = 'offer.clear.RData')
+save(offer.clear.2022, file = 'offer.clear.2022.RData')
+save(offer.clear.2023, file = 'offer.clear.2023.RData')
+save(prezzozonale, file = 'prezzozonale.RData')
+save(bspline.basis, file = 'bspline.basis.RData')
+
+# Now we have coefficients and Basismat for functional data objects in the
+# dataframe, avoiding missing data. They're also indexed by date.
+
+# FDA: smoothing: --------------------------------------------------------------
+
+load("offer.clear.RData")
+load("offer.clear.2022.RData")
+load("offer.clear.2023.RData")
+load("prezzozonale.RData")
+
+par(mfrow = c(1, 1))
+plot (bspline.basis)
+
+# Define domain to plot:
+domain <- seq(0, 1, by = 0.005)
+basismat_domain <- eval.basis(evalarg = domain, basisobj = bspline.basis)
+
+# Definition of useful indexes:
+index_day <- function(y, m, d){ # all hours in a day
+  which(offer.clear$Year == y &
+          offer.clear$Month == m &
+          offer.clear$Day == d)
+}
+
+index_hour <- function(y, m, h){ # all days in a month, one hour
+  which(offer.clear$Year == y &
+          offer.clear$Month == m &
+          offer.clear$Hour == h)
+}
+
+index_yearmonth <- function(d, h){ # all years, all months, for an hour in a day
+  which(offer.clear$Hour == h &
+          offer.clear$Day == d)
+}
+
+index_month <- function(y, d, h){ # all months, for an hour in a day in a year
+  which(offer.clear$Hour == h &
+          offer.clear$Day == d &
+          offer.clear$Year == y)
+}
+
+index_moment <- function(y, m, d, h){
+  which(offer.clear$Hour == h &
+          offer.clear$Day == d &
+          offer.clear$Year == y &
+          offer.clear$Month == m)
+}
+
+par(mfrow = c(1,1))
+y = 2022
+m = 1
+d = 1
+h = 8
+ind <- index_moment(y, m, d, h)
+plot(domain, rep(0, length(domain)), type = 'n', ylim =
+       c(0, max(offer.clear$Prezzi[[ind]])), 
+     xlab = 'Volume fraction', ylab = 'Smoothed and Real Prices',
+     main = paste('OFFER: y', y, ', m', m, ', d', d, ' h', h))
+coefficients <- unlist(offer.clear$OfferBidsCoef[ind])
+smoothed <- basismat_domain %*% coefficients
+lines(domain, smoothed, col = "#008000", lwd = 1.5)
+norm_v <- offer.clear$NormV[[ind]]
+prezzi <- offer.clear$Prezzi[[ind]]
+points(norm_v, prezzi, col = "#000080")
+lines(norm_v, prezzi, type = 's', col = "#00FFFF", lty = 2)
+
+par(mfrow = c(1, 2))
+y = 2022
+m = 1
+d = 1
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 3000), 
+     xlab = 'Volume fraction', ylab = 'Smoothed Prices',
+     main = paste('offer: y', y, ', m', m, ', d', d))
+colors <- rainbow(length(index_day(y, m, d)))
+j = 1
+for (i in index_day(y, m ,d)){
+  coefficients <- unlist(offer.clear$OfferBidsCoef[i])
+  smoothed <- basismat_domain %*% coefficients
+  lines(domain, smoothed, col = colors[j])
+  j = j + 1
+}
+
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Real prices',
+     main = paste('offer: y', y, ', m', m, ', d', d))
+j = 1
+for (i in index_day(y, m ,d)){
+  step_function <- stepfun(x = offer.clear$NormV[[i]],
+            y = c(offer.clear$Prezzi[[i]], max(offer.clear$Prezzi[[i]])))
+  steps<- step_function(domain)
+  lines(domain, steps, col = colors[j])
+  j = j + 1
+}
+
+par(mfrow = c(1, 2))
+y = 2022
+m = 8
+h = 21
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Smoothed Prices',
+     main = paste('offer: y', y, ', m', m, ', h', h))
+colors <- rainbow(length(index_hour(y, m, h)))
+j = 1
+for (i in index_hour(y, m ,h)){
+  coefficients <- unlist(offer.clear$OfferBidsCoef[i])
+  smoothed <- basismat_domain %*% coefficients
+  lines(domain, smoothed, col = colors[j])
+  j = j + 1
+}
+
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Real Prices',
+     main = paste('offer: y', y, ', m', m, ', h', h))
+j = 1
+for (i in index_hour(y, m ,h)){
+  norm_v <- offer.clear$NormV[[i]]
+  prezzi <- offer.clear$Prezzi[[i]]
+  lines(norm_v, prezzi, col = colors[j])
+  j = j + 1
+}
+
+par(mfrow = c(1, 2))
+h = 19
+d = 1
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Smoothed Prices',
+     main = paste('offer: h', h, ', d', d))
+colors <- rainbow(length(index_yearmonth(d, h)))
+j = 1
+for (i in index_yearmonth(d, h)){
+  coefficients <- unlist(offer.clear$OfferBidsCoef[i])
+  smoothed <- basismat_domain %*% coefficients
+  lines(domain, smoothed, col = colors[j])
+  j = j + 1
+}
+
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Real prices',
+     main = paste('offer: h', h, ', d', d))
+j = 1
+for (i in index_yearmonth(d, h)){
+  norm_v <- offer.clear$NormV[[i]]
+  prezzi <- offer.clear$Prezzi[[i]]
+  lines(norm_v, prezzi, col = colors[j])
+  j = j + 1
+}
+
+par(mfrow = c(1, 2))
+y = 2022
+h = 19
+d = 1
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Smoothed Prices',
+     main = paste('offer: y', y, ', h', h, ', d', d))
+colors <- rainbow(length(index_month(2023, d, h)))
+j = 1
+for (i in index_month(y, d, h)){
+  coefficients <- unlist(offer.clear$OfferBidsCoef[i])
+  smoothed <- basismat_domain %*% coefficients
+  lines(domain, smoothed, col = colors[j])
+  j = j + 1
+}
+
+plot(domain, rep(0, length(domain)), type = 'n', ylim = c(0, 4000), 
+     xlab = 'Volume fraction', ylab = 'Real prices',
+     main = paste('offer: y', y, ', h', h, ', d', d))
+j = 1
+for (i in index_month(y, d, h)){
+  norm_v <- offer.clear$NormV[[i]]
+  prezzi <- offer.clear$Prezzi[[i]]
+  lines(norm_v, prezzi, col = colors[j])
+  j = j + 1
+}
+
+# Prezzo zonale:
+prezzozonale$Anno <- year(prezzozonale$Data)
+prezzozonale$Mese <- month(prezzozonale$Data)
+prezzozonale$Giorno <- day(prezzozonale$Data)
+prezzozonale$GiornoSettimana <- weekdays(as.Date(prezzozonale$Data))
+
+prezzozonale$GiornoSettimana <- factor(prezzozonale$GiornoSettimana,
+                                       levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+                                                  "Saturday", "Sunday"), ordered = TRUE)
+
+
+
